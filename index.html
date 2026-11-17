@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모둠 뽑기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* 레이아웃: 왼쪽 설정 패널 + 오른쪽 칠판(모둠 카드 격자). 칠판 한 가지 세계로 고정한 단일 테마. */
+:root{
+  color-scheme: dark;
+  --board:#1f3d34;
+  --board-deep:#162c26;
+  --panel:#12241f;
+  --line:#3a5a4f;
+  --chalk:#f3efe2;
+  --chalk-dim:#a9bdb2;
+  --accent:#ffd35c;
+  --wood:#8a5a34;
+  --wood-dark:#5f3c20;
+  --font-display:"Jua","Malgun Gothic","맑은 고딕",sans-serif;
+  --font-body:"Noto Sans KR","Malgun Gothic","맑은 고딕",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--board-deep);color:var(--chalk);font-family:var(--font-body);font-size:16px;line-height:1.5}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.app{display:flex;height:100%;min-height:0}
+
+/* ───── 설정 패널 ───── */
+.panel{width:330px;flex:none;background:var(--panel);border-right:1px solid var(--line);padding:20px 18px;display:flex;flex-direction:column;gap:18px;overflow-y:auto}
+.app.collapsed .panel{display:none}
+.panel h1{font-family:var(--font-display);font-weight:400;font-size:30px;margin:0;color:var(--accent);letter-spacing:.02em}
+.field{display:flex;flex-direction:column;gap:8px}
+.label{font-size:13px;font-weight:700;color:var(--chalk-dim);letter-spacing:.04em}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--board-deep);border:1px solid var(--line);border-radius:10px;padding:4px}
+.seg button{border:0;background:transparent;border-radius:7px;padding:9px 6px;font-weight:500;color:var(--chalk-dim)}
+.seg button[aria-pressed="true"]{background:var(--chalk);color:var(--board-deep);font-weight:700}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper button{width:46px;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--board);font-size:24px;line-height:1;font-weight:700}
+.stepper button:hover{background:#2a4f44}
+.stepper output{flex:1;text-align:center;font-family:var(--font-display);font-size:28px;font-variant-numeric:tabular-nums}
+.stepper output small{font-size:16px;color:var(--chalk-dim);margin-left:2px}
+textarea{width:100%;min-height:150px;resize:vertical;background:var(--board-deep);border:1px solid var(--line);border-radius:10px;padding:10px 12px;line-height:1.6}
+textarea::placeholder{color:#6f877c}
+.roster{display:flex;flex-wrap:wrap;gap:5px;max-height:190px;overflow-y:auto}
+.roster button{border:1px solid var(--line);background:var(--board);border-radius:999px;padding:3px 10px;font-size:13.5px}
+.roster button[aria-pressed="true"]{background:transparent;color:#6f877c;text-decoration:line-through;border-style:dashed}
+.hint{font-size:12.5px;color:var(--chalk-dim);margin:0}
+.check{display:flex;align-items:center;gap:10px;font-size:15px;cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.hidden{display:none !important}
+
+/* ───── 칠판 ───── */
+.stage{flex:1;min-width:0;display:flex;flex-direction:column;padding:14px;gap:12px}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.summary{font-family:var(--font-display);font-size:clamp(18px,2vw,28px);margin-right:auto;font-variant-numeric:tabular-nums}
+.summary b{color:var(--accent);font-weight:400}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 16px;font-weight:500}
+.btn:hover{background:#1b352e}
+.btn.primary{background:var(--accent);color:#2a2203;border-color:var(--accent);font-family:var(--font-display);font-size:clamp(20px,2vw,28px);padding:8px 28px}
+.btn.primary:hover{background:#ffdf85}
+.frame{position:relative;flex:1;min-height:0;background:var(--board);border:12px solid var(--wood);border-radius:10px;box-shadow:inset 0 0 0 2px var(--wood-dark),inset 0 0 60px rgba(0,0,0,.28);padding:16px}
+.board{display:grid;gap:14px;height:100%;--f:28px;--ic:1}
+.card{--c:var(--chalk);border:2px dashed color-mix(in srgb,var(--c) 55%,transparent);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:calc(var(--f)*.25);min-height:0;min-width:0;overflow:auto}
+.card h2{margin:0;font-family:var(--font-display);font-weight:400;font-size:calc(var(--f)*.8);line-height:1.3;color:var(--c);display:flex;align-items:baseline;gap:.5em;white-space:nowrap}
+.card h2 span{font-family:var(--font-body);font-size:.6em;color:var(--chalk-dim)}
+.members{display:grid;grid-template-columns:repeat(var(--ic),minmax(0,1fr));column-gap:calc(var(--f)*.4);row-gap:calc(var(--f)*.25);flex:1;align-content:center}
+.chip{font-family:var(--font-display);font-size:var(--f);line-height:1.5;text-align:center;border-radius:calc(var(--f)*.35);background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--chalk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 .3em}
+.chip.leader{background:var(--c);color:#1a2a25}
+.chip.pop{animation:pop .32s cubic-bezier(.2,1.5,.4,1)}
+@keyframes pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+.empty{place-self:center;grid-column:1/-1;text-align:center;font-family:var(--font-display);font-size:clamp(20px,2.4vw,34px);color:var(--chalk-dim)}
+
+.roller{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(22,44,38,.9);border-radius:2px}
+.roller.on{display:flex}
+.roller p{margin:0;font-size:clamp(16px,1.8vw,24px);color:var(--chalk-dim)}
+.roller strong{font-family:var(--font-display);font-weight:400;font-size:clamp(64px,12vw,200px);line-height:1.1;color:var(--accent)}
+
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--chalk);color:var(--board-deep);font-weight:700;padding:10px 20px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+
+@media (max-width:760px){
+  html,body{height:auto}
+  .app{flex-direction:column;height:auto}
+  .panel{width:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .frame{flex:none;height:560px}
+}
+@media (prefers-reduced-motion:reduce){.chip.pop{animation:none}.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <aside class="panel" id="panel" aria-label="설정">
+    <h1>모둠 뽑기</h1>
+
+    <div class="field">
+      <span class="label">명단</span>
+      <div class="seg" role="group" aria-label="명단 방식">
+        <button type="button" id="modeNum" aria-pressed="true">번호로</button>
+        <button type="button" id="modeName" aria-pressed="false">이름으로</button>
+      </div>
+      <div class="stepper" id="countBox">
+        <button type="button" id="countDown" aria-label="학생 수 줄이기">−</button>
+        <output id="countOut" for="countDown countUp">24<small>명</small></output>
+        <button type="button" id="countUp" aria-label="학생 수 늘리기">+</button>
+      </div>
+      <textarea id="names" class="hidden" placeholder="한 줄에 한 명씩 입력하세요&#10;(쉼표로 구분해도 됩니다)" aria-label="학생 이름"></textarea>
+    </div>
+
+    <div class="field">
+      <span class="label">결석 · 제외 <span id="absentCount"></span></span>
+      <div class="roster" id="roster"></div>
+      <p class="hint">누르면 뽑기에서 빠집니다. 다시 누르면 돌아옵니다.</p>
+    </div>
+
+    <div class="field">
+      <span class="label">나누는 방법</span>
+      <div class="seg" role="group" aria-label="나누는 방법">
+        <button type="button" id="splitGroups" aria-pressed="true">모둠 수</button>
+        <button type="button" id="splitSize" aria-pressed="false">모둠당 인원</button>
+      </div>
+      <div class="stepper">
+        <button type="button" id="valDown" aria-label="줄이기">−</button>
+        <output id="valOut" for="valDown valUp">6<small>모둠</small></output>
+        <button type="button" id="valUp" aria-label="늘리기">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">옵션</span>
+      <label class="check" for="optLeader"><input type="checkbox" id="optLeader"> 모둠장도 함께 뽑기</label>
+      <label class="check" for="optSound"><input type="checkbox" id="optSound" checked> 효과음</label>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="bar">
+      <div class="summary" id="summary" aria-live="polite"></div>
+      <button type="button" class="btn primary" id="drawBtn">모둠 뽑기</button>
+      <button type="button" class="btn" id="copyBtn">결과 복사</button>
+      <button type="button" class="btn" id="panelBtn">설정 닫기</button>
+      <button type="button" class="btn" id="fullBtn">전체 화면</button>
+    </div>
+    <div class="frame" id="frame">
+      <div class="board" id="board"></div>
+      <div class="roller" id="roller" aria-hidden="true"><p>섞는 중</p><strong id="rollerName"></strong></div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var COLORS = ['#ffd35c','#ff9fb0','#8fd3ff','#a6e9b5','#ffb877','#d3b8ff','#7fe0d2','#f3efe2'];
+  var KEY = 'group-picker-v1';
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var state = { mode:'num', count:24, names:'', split:'groups', groups:6, size:4, leader:false, sound:true, absent:[] };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      Object.keys(state).forEach(function(k){ if (typeof saved[k] === typeof state[k]) state[k] = saved[k]; });
+      if (!Array.isArray(state.absent)) state.absent = [];
+    }
+  } catch (e) {}
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  var result = [];      // 모둠별 이름 배열
+  var timers = [];
+  var running = false;
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function roster(){
+    if (state.mode === 'num') {
+      var a = [];
+      for (var i = 1; i <= state.count; i++) a.push(i + '번');
+      return a;
+    }
+    return state.names.split(/[\n,]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  }
+  function active(){
+    return roster().filter(function(n){ return state.absent.indexOf(n) < 0; });
+  }
+  function groupCount(n){
+    if (n === 0) return 0;
+    return state.split === 'groups' ? Math.min(state.groups, n) : Math.ceil(n / state.size);
+  }
+  function shuffle(a){
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  /* ───── 설정 패널 그리기 ───── */
+  function renderPanel(){
+    var num = state.mode === 'num';
+    $('modeNum').setAttribute('aria-pressed', num);
+    $('modeName').setAttribute('aria-pressed', !num);
+    $('countBox').classList.toggle('hidden', !num);
+    $('names').classList.toggle('hidden', num);
+    $('countOut').innerHTML = state.count + '<small>명</small>';
+
+    var g = state.split === 'groups';
+    $('splitGroups').setAttribute('aria-pressed', g);
+    $('splitSize').setAttribute('aria-pressed', !g);
+    $('valOut').innerHTML = (g ? state.groups : state.size) + '<small>' + (g ? '모둠' : '명씩') + '</small>';
+
+    $('optLeader').checked = state.leader;
+    $('optSound').checked = state.sound;
+
+    var list = roster();
+    state.absent = state.absent.filter(function(n){ return list.indexOf(n) >= 0; });
+    var box = $('roster');
+    box.textContent = '';
+    list.forEach(function(name){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = name;
+      b.setAttribute('aria-pressed', state.absent.indexOf(name) >= 0);
+      b.addEventListener('click', function(){
+        var i = state.absent.indexOf(name);
+        if (i >= 0) state.absent.splice(i, 1); else state.absent.push(name);
+        changed();
+      });
+      box.appendChild(b);
+    });
+    $('absentCount').textContent = state.absent.length ? '(' + state.absent.length + '명)' : '';
+  }
+
+  function renderSummary(){
+    var n = active().length, g = groupCount(n);
+    if (!n) { $('summary').textContent = '명단을 입력하세요'; return; }
+    var lo = Math.floor(n / g), hi = Math.ceil(n / g);
+    $('summary').innerHTML = '<b>' + n + '</b>명 · <b>' + g + '</b>모둠 · ' + (lo === hi ? lo : lo + '~' + hi) + '명씩';
+  }
+
+  /* ───── 칠판 그리기 ───── */
+  function chipEl(name, isLeader, pop){
+    var s = document.createElement('div');
+    s.className = 'chip' + (isLeader ? ' leader' : '') + (pop ? ' pop' : '');
+    s.textContent = (isLeader ? '★ ' : '') + name;
+    s.title = name;
+    return s;
+  }
+  function renderBoard(filled){
+    var board = $('board');
+    board.textContent = '';
+    if (!result.length) {
+      var e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = '왼쪽 설정에서 명단을 입력한 뒤 [모둠 뽑기]를 누르세요';
+      board.style.gridTemplateColumns = '1fr';
+      board.appendChild(e);
+      return;
+    }
+    result.forEach(function(members, gi){
+      var card = document.createElement('section');
+      card.className = 'card';
+      card.style.setProperty('--c', COLORS[gi % COLORS.length]);
+      var h = document.createElement('h2');
+      h.textContent = (gi + 1) + '모둠';
+      var cnt = document.createElement('span');
+      cnt.textContent = members.length + '명';
+      h.appendChild(cnt);
+      var box = document.createElement('div');
+      box.className = 'members';
+      if (filled) members.forEach(function(m, i){ box.appendChild(chipEl(m, state.leader && i === 0, false)); });
+      card.appendChild(h); card.appendChild(box);
+      board.appendChild(card);
+    });
+    fit();
+  }
+
+  /* 화면에 맞춰 열 수와 글자 크기를 가장 크게 잡는다 */
+  function textLen(s){
+    var w = 0;
+    for (var i = 0; i < s.length; i++) w += s.charCodeAt(i) > 255 ? 1 : 0.6;
+    return w;
+  }
+  function fit(){
+    var g = result.length;
+    if (!g) return;
+    var board = $('board');
+    var W = board.clientWidth, H = board.clientHeight, gap = 14;
+    var maxSize = 0, maxLen = 2;
+    result.forEach(function(m){
+      maxSize = Math.max(maxSize, m.length);
+      m.forEach(function(n){ maxLen = Math.max(maxLen, textLen(n)); });
+    });
+    if (state.leader) maxLen += 1.4;
+    var best = { f: 0, cols: 1, ic: 1 };
+    for (var cols = 1; cols <= g; cols++) {
+      var rows = Math.ceil(g / cols);
+      var cw = (W - gap * (cols - 1)) / cols - 32;
+      var ch = (H - gap * (rows - 1)) / rows - 30;
+      for (var ic = 1; ic <= 3; ic++) {
+        var ir = Math.ceil(maxSize / ic);
+        var fh = ch / (1.3 + ir * 1.75);
+        var fw = cw / (ic * (maxLen + 0.5) + (ic - 1) * 0.4);
+        var f = Math.min(fh, fw);
+        if (f > best.f) best = { f: f, cols: cols, ic: ic };
+      }
+    }
+    board.style.gridTemplateColumns = 'repeat(' + best.cols + ', minmax(0, 1fr))';
+    board.style.setProperty('--f', clamp(best.f, 13, 110).toFixed(1) + 'px');
+    board.style.setProperty('--ic', best.ic);
+  }
+
+  /* ───── 효과음 ───── */
+  var actx = null;
+  function beep(freq, dur, vol){
+    if (!state.sound) return;
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      var o = actx.createOscillator(), gn = actx.createGain();
+      o.type = 'triangle'; o.frequency.value = freq;
+      gn.gain.setValueAtTime(vol, actx.currentTime);
+      gn.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+      o.connect(gn); gn.connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + dur);
+    } catch (e) {}
+  }
+
+  /* ───── 뽑기 ───── */
+  function stopTimers(){
+    timers.forEach(function(t){ clearTimeout(t); clearInterval(t); });
+    timers = [];
+  }
+  function finish(){
+    stopTimers();
+    running = false;
+    $('roller').classList.remove('on');
+    $('drawBtn').textContent = '다시 뽑기';
+    renderBoard(true);
+  }
+  function draw(animated){
+    stopTimers();
+    var people = shuffle(active());
+    var g = groupCount(people.length);
+    result = [];
+    for (var i = 0; i < g; i++) result.push([]);
+    people.forEach(function(p, i){ result[i % g].push(p); });
+    renderSummary();
+
+    if (!animated || reduced || !people.length) { finish(); if (!people.length) $('drawBtn').textContent = '모둠 뽑기'; return; }
+
+    running = true;
+    $('drawBtn').textContent = '바로 보기';
+    renderBoard(false);
+    var roller = $('roller'), rn = $('rollerName');
+    roller.classList.add('on');
+    var spin = setInterval(function(){
+      rn.textContent = people[Math.floor(Math.random() * people.length)];
+      beep(520 + Math.random() * 200, 0.05, 0.04);
+    }, 70);
+    timers.push(spin);
+
+    timers.push(setTimeout(function(){
+      clearInterval(spin);
+      roller.classList.remove('on');
+      var boxes = document.querySelectorAll('#board .members');
+      var step = clamp(5000 / people.length, 90, 350);
+      var k = 0, maxRound = Math.ceil(people.length / g);
+      var deal = setInterval(function(){
+        var gi = k % g, ri = Math.floor(k / g);
+        var name = result[gi][ri];
+        if (name !== undefined) {
+          boxes[gi].appendChild(chipEl(name, state.leader && ri === 0, true));
+          beep(440 + gi * 40, 0.08, 0.06);
+        }
+        k++;
+        if (k >= g * maxRound) {
+          clearInterval(deal);
+          running = false;
+          $('drawBtn').textContent = '다시 뽑기';
+          beep(660, 0.18, 0.08);
+          timers.push(setTimeout(function(){ beep(880, 0.3, 0.08); }, 140));
+        }
+      }, step);
+      timers.push(deal);
+    }, 1100));
+  }
+
+  function changed(){
+    save();
+    renderPanel();
+    renderSummary();
+  }
+
+  /* ───── 이벤트 ───── */
+  $('modeNum').addEventListener('click', function(){ state.mode = 'num'; changed(); });
+  $('modeName').addEventListener('click', function(){ state.mode = 'name'; changed(); $('names').focus(); });
+  $('countDown').addEventListener('click', function(){ state.count = clamp(state.count - 1, 2, 60); changed(); });
+  $('countUp').addEventListener('click', function(){ state.count = clamp(state.count + 1, 2, 60); changed(); });
+  $('names').value = state.names;
+  $('names').addEventListener('input', function(){ state.names = this.value; changed(); });
+  $('splitGroups').addEventListener('click', function(){ state.split = 'groups'; changed(); });
+  $('splitSize').addEventListener('click', function(){ state.split = 'size'; changed(); });
+  function stepVal(d){
+    if (state.split === 'groups') state.groups = clamp(state.groups + d, 2, 20);
+    else state.size = clamp(state.size + d, 2, 20);
+    changed();
+  }
+  $('valDown').addEventListener('click', function(){ stepVal(-1); });
+  $('valUp').addEventListener('click', function(){ stepVal(1); });
+  $('optLeader').addEventListener('change', function(){ state.leader = this.checked; save(); if (result.length && !running) renderBoard(true); });
+  $('optSound').addEventListener('change', function(){ state.sound = this.checked; save(); });
+
+  $('drawBtn').addEventListener('click', function(){
+    if (running) finish(); else draw(true);
+  });
+
+  var toastTimer = null;
+  function toast(msg){
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('on'); }, 1800);
+  }
+  $('copyBtn').addEventListener('click', function(){
+    if (!result.length) { toast('먼저 모둠을 뽑아 주세요'); return; }
+    var text = result.map(function(m, i){ return (i + 1) + '모둠: ' + m.join(', '); }).join('\n');
+    try {
+      navigator.clipboard.writeText(text).then(
+        function(){ toast('결과를 복사했습니다'); },
+        function(){ toast('복사하지 못했습니다'); }
+      );
+    } catch (e) { toast('복사하지 못했습니다'); }
+  });
+  $('panelBtn').addEventListener('click', function(){
+    var c = $('app').classList.toggle('collapsed');
+    this.textContent = c ? '설정 열기' : '설정 닫기';
+    fit();
+  });
+  $('fullBtn').addEventListener('click', function(){
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(function(){ toast('전체 화면을 쓸 수 없습니다. F11을 눌러 보세요'); });
+    } catch (e) { toast('전체 화면을 쓸 수 없습니다. F11을 눌러 보세요'); }
+  });
+  document.addEventListener('fullscreenchange', function(){
+    $('fullBtn').textContent = document.fullscreenElement ? '전체 화면 끝내기' : '전체 화면';
+  });
+  window.addEventListener('resize', fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+
+  /* 처음 열면 바로 한 번 뽑힌 상태로 보여 준다 */
+  renderPanel();
+  draw(false);
+})();
+</script>
+</body>
+</html>
